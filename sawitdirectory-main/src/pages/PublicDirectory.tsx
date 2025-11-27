@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Factory, LogIn } from 'lucide-react';
-import { supabase, Mill } from '../lib/supabase';
+import { db, Mill } from '../lib/firebase';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { MillCard } from '../components/MillCard';
 import { SearchBar } from '../components/SearchBar';
 import { FilterBar } from '../components/FilterBar';
@@ -20,39 +21,26 @@ export function PublicDirectory({ onMillClick, onLoginClick }: PublicDirectoryPr
   const [tahunOperasiFilter, setTahunOperasiFilter] = useState('');
 
   useEffect(() => {
-    fetchMills();
+    const q = query(collection(db, 'mills'), orderBy('createdAt', 'desc'));
 
-    const subscription = supabase
-      .channel('mills_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mills' }, () => {
-        fetchMills();
-      })
-      .subscribe();
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const millsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Mill[];
+      setMills(millsData);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching mills:', error);
+      setLoading(false);
+    });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     filterMills();
   }, [mills, searchQuery, provinsiFilter, kabupatenKotaFilter, tahunOperasiFilter]);
-
-  const fetchMills = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('mills')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setMills(data || []);
-    } catch (error) {
-      console.error('Error fetching mills:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filterMills = () => {
     let filtered = [...mills];

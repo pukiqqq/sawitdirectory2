@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Factory, Plus, Edit, Trash2, LogOut, X } from 'lucide-react';
-import { supabase, Mill } from '../lib/supabase';
+import { db, Mill } from '../lib/firebase';
+import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { MillForm } from '../components/MillForm';
 
@@ -13,38 +14,33 @@ export function AdminDashboard() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchMills();
+    const q = query(collection(db, 'mills'), orderBy('createdAt', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const millsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Mill[];
+      setMills(millsData);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching mills:', error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const fetchMills = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('mills')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setMills(data || []);
-    } catch (error) {
-      console.error('Error fetching mills:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreate = async (data: Omit<Mill, 'id' | 'created_at' | 'updated_at' | 'created_by'>) => {
+  const handleCreate = async (data: Omit<Mill, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>) => {
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('mills').insert([
-        {
-          ...data,
-          created_by: user?.id,
-        },
-      ]);
+      await addDoc(collection(db, 'mills'), {
+        ...data,
+        createdBy: user?.uid,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
 
-      if (error) throw error;
-
-      await fetchMills();
       setShowForm(false);
       alert('Pabrik berhasil ditambahkan');
     } catch (error) {
@@ -55,22 +51,17 @@ export function AdminDashboard() {
     }
   };
 
-  const handleUpdate = async (data: Omit<Mill, 'id' | 'created_at' | 'updated_at' | 'created_by'>) => {
+  const handleUpdate = async (data: Omit<Mill, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>) => {
     if (!editingMill) return;
 
     setSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('mills')
-        .update({
-          ...data,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingMill.id);
+      const millRef = doc(db, 'mills', editingMill.id);
+      await updateDoc(millRef, {
+        ...data,
+        updatedAt: new Date().toISOString(),
+      });
 
-      if (error) throw error;
-
-      await fetchMills();
       setEditingMill(null);
       setShowForm(false);
       alert('Pabrik berhasil diperbarui');
@@ -86,11 +77,7 @@ export function AdminDashboard() {
     if (!confirm(`Apakah Anda yakin ingin menghapus pabrik "${name}"?`)) return;
 
     try {
-      const { error } = await supabase.from('mills').delete().eq('id', id);
-
-      if (error) throw error;
-
-      await fetchMills();
+      await deleteDoc(doc(db, 'mills', id));
       alert('Pabrik berhasil dihapus');
     } catch (error) {
       console.error('Error deleting mill:', error);

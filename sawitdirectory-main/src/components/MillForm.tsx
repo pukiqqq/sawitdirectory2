@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Mill } from '../lib/supabase';
+import { Mill } from '../lib/firebase';
 
 interface MillFormProps {
   mill?: Mill | null;
-  onSubmit: (data: Omit<Mill, 'id' | 'created_at' | 'updated_at' | 'created_by'>) => void;
+  onSubmit: (data: Omit<Mill, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>) => void;
   onCancel: () => void;
   loading?: boolean;
 }
